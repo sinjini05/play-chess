@@ -1,80 +1,86 @@
 const express = require("express");
-const socket = require ("socket.io");
+const socket = require("socket.io");
 const http = require("http");
-const { Chess } =require("chess.js");
-const path= require("path");
+const { Chess } = require("chess.js");
+const path = require("path");
+const helmet = require("helmet");
 
 const app = express();
-
 const server = http.createServer(app);
-//socket runs http server (which is linked w the express server)
-const io = socket(server);//socket helps in realtime conversation
-
+const io = socket(server);
 const chess = new Chess();
 let players = {};
 let currentPlayer = "w";
 
-app.set("view engine","ejs"); // ejs is like html
-app.use(express.static(path.join(__dirname,"public"))); // for static files like js,img,vid,fonts
+app.set("view engine", "ejs");
+app.use(helmet()); // Add security headers
+app.use(express.static(path.join(__dirname, "public"))); // Serve static files
+app.use(express.json()); // Built-in middleware for JSON
+app.use(express.urlencoded({ extended: true })); // Built-in middleware for URL-encoded data
 
-app.get("/",(req,res)=>{
-    res.render("index",{ title: "Custom Chess Game"});
+// Serve the main page
+app.get("/", (req, res) => {
+    res.render("index", { title: "Custom Chess Game" });
 });
 
-io.on("connection",function(uniquesocket){
+// Handle socket connections
+io.on("connection", function (uniquesocket) {
     console.log("Connected");
 
-    if(!players.white){
+    // Assign player roles
+    if (!players.white) {
         players.white = uniquesocket.id;
-        uniquesocket.emit("playerRole","w");
-    }
-    else if(!players.black){
+        uniquesocket.emit("playerRole", "w");
+    } else if (!players.black) {
         players.black = uniquesocket.id;
-        uniquesocket.emit("playerRole","b");
-    }
-    else{
-        uniquesocket.emit("specatatorRole");
+        uniquesocket.emit("playerRole", "b");
+    } else {
+        uniquesocket.emit("spectatorRole");
     }
 
-    uniquesocket.on("disconnect",function(){
-        if(uniquesocket.id === players.white){
+    // Handle disconnections
+    uniquesocket.on("disconnect", function () {
+        if (uniquesocket.id === players.white) {
             delete players.white;
-        }
-        else if(uniquesocket.id === players.black){
+        } else if (uniquesocket.id === players.black) {
             delete players.black;
         }
-
     });
 
-    uniquesocket.on("move",(move)=>{
-        //right move
-        try{
-            if(chess.turn() === 'w' && uniquesocket.id !== players.white) return;
-            if(chess.turn() === 'b' && uniquesocket.id !== players.black) return;
+    // Handle moves
+    uniquesocket.on("move", (move) => {
+        try {
+            if (chess.turn() === 'w' && uniquesocket.id !== players.white) return;
+            if (chess.turn() === 'b' && uniquesocket.id !== players.black) return;
 
             const result = chess.move(move);
-            if(result){
+            if (result) {
                 currentPlayer = chess.turn();
-                io.emit("move",move);
-                io.emit("boardState", chess.fen())
-            }
-            else{
+                io.emit("move", move);
+                io.emit("boardState", chess.fen());
+            } else {
                 console.log("Invalid move");
-                uniquesocket.emit("invalidMove",move);
-            } 
-        }
-        catch(err){
+                uniquesocket.emit("invalidMove", move);
+            }
+        } catch (err) {
             console.log(err);
             uniquesocket.emit("Invalid move: ", move);
         }
-    })
-
+    });
 });
 
-server.listen(3000,function(){
-    console.log("listening on port 3000");
-})
+// Secure redirect example with validation
+const validRedirects = ['/page1', '/page2']; // Whitelisted routes
+app.get('/redirect', (req, res) => {
+    const target = req.query.target;
+    if (validRedirects.includes(target)) {
+        res.redirect(target);
+    } else {
+        res.status(400).send('Invalid redirect');
+    }
+});
 
-
-
-
+// Start the server
+server.listen(3000, function () {
+    console.log("Listening on port 3000");
+});
