@@ -4,6 +4,7 @@ const http = require("http");
 const { Chess } = require("chess.js");
 const path = require("path");
 const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 
 const app = express();
 const server = http.createServer(app);
@@ -12,22 +13,25 @@ const chess = new Chess();
 let players = {};
 let currentPlayer = "w";
 
-app.set("view engine", "ejs");
-app.use(helmet()); // Add security headers
+app.set("view engine", "ejs"); // ejs is like html
+app.use(helmet()); // Add security headers including XSS protection
 app.use(express.static(path.join(__dirname, "public"))); // Serve static files
-app.use(express.json()); // Built-in middleware for JSON
-app.use(express.urlencoded({ extended: true })); // Built-in middleware for URL-encoded data
 
-// Serve the main page
+const limiter = rateLimit({
+    windowMs: 1 * 60 * 1000, // 1 minute
+    max: 100, // Limit each IP to 100 requests per windowMs
+    message: 'Too many requests, please try again later.'
+});
+
+app.use(limiter);
+
 app.get("/", (req, res) => {
     res.render("index", { title: "Custom Chess Game" });
 });
 
-// Handle socket connections
 io.on("connection", function (uniquesocket) {
     console.log("Connected");
 
-    // Assign player roles
     if (!players.white) {
         players.white = uniquesocket.id;
         uniquesocket.emit("playerRole", "w");
@@ -38,7 +42,6 @@ io.on("connection", function (uniquesocket) {
         uniquesocket.emit("spectatorRole");
     }
 
-    // Handle disconnections
     uniquesocket.on("disconnect", function () {
         if (uniquesocket.id === players.white) {
             delete players.white;
@@ -47,7 +50,6 @@ io.on("connection", function (uniquesocket) {
         }
     });
 
-    // Handle moves
     uniquesocket.on("move", (move) => {
         try {
             if (chess.turn() === 'w' && uniquesocket.id !== players.white) return;
@@ -56,8 +58,8 @@ io.on("connection", function (uniquesocket) {
             const result = chess.move(move);
             if (result) {
                 currentPlayer = chess.turn();
-                io.emit("move", move);
-                io.emit("boardState", chess.fen());
+                io.emit("move", move); // Notify all clients of the move
+                io.emit("boardState", chess.fen()); // Update board state
             } else {
                 console.log("Invalid move");
                 uniquesocket.emit("invalidMove", move);
@@ -69,18 +71,6 @@ io.on("connection", function (uniquesocket) {
     });
 });
 
-// Secure redirect example with validation
-const validRedirects = ['/page1', '/page2']; // Whitelisted routes
-app.get('/redirect', (req, res) => {
-    const target = req.query.target;
-    if (validRedirects.includes(target)) {
-        res.redirect(target);
-    } else {
-        res.status(400).send('Invalid redirect');
-    }
-});
-
-// Start the server
 server.listen(3000, function () {
     console.log("Listening on port 3000");
 });
