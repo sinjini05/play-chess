@@ -11,15 +11,14 @@ const server = http.createServer(app);
 const io = socket(server);
 const chess = new Chess();
 let players = {};
-let currentPlayer = "w";
 
-app.set("view engine", "ejs"); // ejs is like html
-app.use(helmet()); // Add security headers including XSS protection
-app.use(express.static(path.join(__dirname, "public"))); // Serve static files
+app.set("view engine", "ejs"); 
+app.use(helmet()); 
+app.use(express.static(path.join(__dirname, "public"))); 
 
 const limiter = rateLimit({
-    windowMs: 1 * 60 * 1000, // 1 minute
-    max: 100, // Limit each IP to 100 requests per windowMs
+    windowMs: 1 * 60 * 1000,
+    max: 100,
     message: 'Too many requests, please try again later.'
 });
 
@@ -45,28 +44,30 @@ io.on("connection", function (uniquesocket) {
     uniquesocket.on("disconnect", function () {
         if (uniquesocket.id === players.white) {
             delete players.white;
+            io.emit("playerDisconnected", { color: "white" });
         } else if (uniquesocket.id === players.black) {
             delete players.black;
+            io.emit("playerDisconnected", { color: "black" });
         }
     });
 
     uniquesocket.on("move", (move) => {
         try {
-            if (chess.turn() === 'w' && uniquesocket.id !== players.white) return;
-            if (chess.turn() === 'b' && uniquesocket.id !== players.black) return;
+            if ((chess.turn() === 'w' && uniquesocket.id !== players.white) ||
+                (chess.turn() === 'b' && uniquesocket.id !== players.black)) {
+                return;
+            }
 
             const result = chess.move(move);
             if (result) {
-                currentPlayer = chess.turn();
-                io.emit("move", move); // Notify all clients of the move
-                io.emit("boardState", chess.fen()); // Update board state
+                io.emit("move", move);
+                io.emit("boardState", chess.fen());
             } else {
-                console.log("Invalid move");
-                uniquesocket.emit("invalidMove", move);
+                uniquesocket.emit("invalidMove", { message: "Invalid move", move });
             }
         } catch (err) {
-            console.log(err);
-            uniquesocket.emit("Invalid move: ", move);
+            console.error(err);
+            uniquesocket.emit("error", { message: "An error occurred", details: err.message });
         }
     });
 });
