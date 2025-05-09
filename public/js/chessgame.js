@@ -4,7 +4,7 @@ const boardElement = document.querySelector(".chessboard");
 
 //role assigned by server, frontend null
 let draggedPiece = null;
-let sourceSqaure = null;
+let sourceSquare = null;
 let playerRole = null;
 
 const renderBoard = () =>{
@@ -25,7 +25,7 @@ const renderBoard = () =>{
             if(square){
                 const pieceElement = document.createElement("div");
                 pieceElement.classList.add("piece",square.color === 'w' ? "white" : "black");
-                pieceElement.innerText = getPieceUnicode(square);
+                pieceElement.textContent = getPieceUnicode(square);
                 pieceElement.draggable = playerRole === square.color;
 
                 pieceElement.addEventListener("dragstart",(e)=>{
@@ -114,7 +114,7 @@ socket.on("spectatorRole",function(){
     renderBoard();
 });
 
-socket.on("boardRole",function(fen){
+socket.on("boardState",function(fen){
     chess.load(fen);
     renderBoard();
 });
